@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Snake Game - Đông Dương</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{
+    margin:0;
+    background:#111;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    font-family:Arial;
+    color:white;
+}
+#container{position:relative}
+canvas{
+    background:#000;
+    border:2px solid #555;
+}
+#title{
+    position:absolute;
+    top:5px;
+    width:100%;
+    text-align:center;
+    font-size:14px;
+    color:#aaa;
+    pointer-events:none;
+}
+#menu{
+    position:absolute;
+    inset:0;
+    background:rgba(0,0,0,0.85);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    gap:15px;
+}
+#menu button{
+    padding:10px 25px;
+    font-size:16px;
+}
+</style>
+</head>
+
+<body>
+<div id="container">
+    <div id="title">Game do Đông Dương tạo</div>
+    <canvas id="game"></canvas>
+
+    <div id="menu">
+        <h2>🐍 RẮN SĂN MỒI</h2>
+        <div id="bestScore"></div>
+        <button onclick="startGame()">▶️ Chơi</button>
+    </div>
+</div>
+
+<script>
+/* ===== CANVAS ===== */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const box = 20;
+const gridSize = Math.floor((Math.min(innerWidth,innerHeight)-40)/box);
+canvas.width = canvas.height = gridSize*box;
+
+/* ===== STORAGE ===== */
+let highScore = Number(localStorage.getItem("snakeHighScore")||0);
+document.getElementById("bestScore").innerText="🏆 Điểm cao nhất: "+highScore;
+
+/* ===== VAR ===== */
+let snake,dir,score,level,food,obstacles;
+let growQueue,foodDelay,loop,speed;
+let currentLevelScore=0;
+
+/* ===== LEVEL ===== */
+function levelFromScore(){
+    return Math.min(100,Math.floor(score/50)+1);
+}
+function speedFromLevel(){
+    return Math.max(60,120-level*2);
+}
+function obstacleCount(){
+    if(level<10) return level*7;
+    if(level<30) return level*10;
+    if(level<60) return level*14;
+    return level*20;
+}
+
+/* ===== RANDOM ===== */
+function randomPos(){
+    let p;
+    do{
+        p={x:Math.floor(Math.random()*gridSize),y:Math.floor(Math.random()*gridSize)};
+    }while(
+        snake.some(s=>s.x===p.x&&s.y===p.y)||
+        obstacles.some(o=>o.x===p.x&&o.y===p.y)
+    );
+    return p;
+}
+
+/* ===== FOOD ===== */
+function foodValue(){
+    let r=Math.random();
+    if(r<0.6) return Math.floor(Math.random()*3)+1;
+    if(r<0.9) return Math.floor(Math.random()*3)+4;
+    return Math.floor(Math.random()*4)+7;
+}
+function createFood(){
+    return {...randomPos(),value:foodValue()};
+}
+function foodColor(v){
+    return `hsl(${v*30},100%,50%)`;
+}
+
+/* ===== OBSTACLES ===== */
+function generateObstacles(){
+    obstacles=[];
+    const count=Math.min(gridSize*gridSize*0.7,obstacleCount());
+    for(let i=0;i<count;i++) obstacles.push(randomPos());
+}
+
+/* ===== START ===== */
+function startGame(){
+    document.getElementById("menu").style.display="none";
+
+    snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+    dir="RIGHT";
+    score=0;
+    level=1;
+    currentLevelScore=0;
+    growQueue=0;
+    foodDelay=0;
+
+    generateObstacles();
+    food=createFood();
+    speed=speedFromLevel();
+
+    clearInterval(loop);
+    loop=setInterval(update,speed);
+}
+
+/* ===== UPDATE ===== */
+function update(){
+    let head={...snake[0]};
+    if(dir==="UP")head.y--;
+    if(dir==="DOWN")head.y++;
+    if(dir==="LEFT")head.x--;
+    if(dir==="RIGHT")head.x++;
+
+    if(
+        head.x<0||head.y<0||
+        head.x>=gridSize||head.y>=gridSize||
+        obstacles.some(o=>o.x===head.x&&o.y===head.y)||
+        snake.some(s=>s.x===head.x&&s.y===head.y)
+    ) return endGame();
+
+    snake.unshift(head);
+
+    if(food&&head.x===food.x&&head.y===food.y){
+        score+=food.value;
+        currentLevelScore+=food.value;
+        growQueue+=food.value;
+        food=null;
+        foodDelay=0;
+
+        if(currentLevelScore>=50){
+            level++;
+            currentLevelScore=0;
+            generateObstacles();
+            speed=speedFromLevel();
+            clearInterval(loop);
+            loop=setInterval(update,speed);
+        }
+    }
+
+    if(growQueue>0)growQueue--;
+    else snake.pop();
+
+    if(!food&&++foodDelay>25) food=createFood();
+    draw();
+}
+
+/* ===== DRAW ===== */
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    ctx.fillStyle="#555";
+    obstacles.forEach(o=>{
+        ctx.fillRect(o.x*box,o.y*box,box,box);
+    });
+
+    if(food&&Math.floor(Date.now()/300)%2===0){
+        ctx.fillStyle=foodColor(food.value);
+        ctx.fillRect(food.x*box,food.y*box,box,box);
+    }
+
+    snake.forEach((s,i)=>{
+        let r=box/2;
+        ctx.beginPath();
+        ctx.arc(s.x*box+r,s.y*box+r,r,0,Math.PI*2);
+        ctx.fillStyle=
+            i===0?"#7CFF00":
+            i===snake.length-1?"#0a3":
+            "linear-gradient";
+        ctx.fill();
+    });
+
+    ctx.fillStyle="white";
+    ctx.font="14px Arial";
+    ctx.fillText("Điểm: "+score,10,20);
+    ctx.fillText("Cấp: "+level+"/100",10,40);
+}
+
+/* ===== END ===== */
+function endGame(){
+    clearInterval(loop);
+    if(score>highScore){
+        highScore=score;
+        localStorage.setItem("snakeHighScore",highScore);
+    }
+    document.getElementById("bestScore").innerText="🏆 Điểm cao nhất: "+highScore;
+    document.getElementById("menu").style.display="flex";
+}
+
+/* ===== CONTROL ===== */
+document.addEventListener("keydown",e=>{
+    if(e.key==="ArrowUp"&&dir!=="DOWN")dir="UP";
+    if(e.key==="ArrowDown"&&dir!=="UP")dir="DOWN";
+    if(e.key==="ArrowLeft"&&dir!=="RIGHT")dir="LEFT";
+    if(e.key==="ArrowRight"&&dir!=="LEFT")dir="RIGHT";
+});
+
+let sx=0,sy=0;
+document.addEventListener("touchstart",e=>{
+    sx=e.touches[0].clientX;
+    sy=e.touches[0].clientY;
+});
+document.addEventListener("touchend",e=>{
+    let dx=e.changedTouches[0].clientX-sx;
+    let dy=e.changedTouches[0].clientY-sy;
+    if(Math.abs(dx)>Math.abs(dy)){
+        if(dx>0&&dir!=="LEFT")dir="RIGHT";
+        else if(dx<0&&dir!=="RIGHT")dir="LEFT";
+    }else{
+        if(dy>0&&dir!=="UP")dir="DOWN";
+        else if(dy<0&&dir!=="DOWN")dir="UP";
+    }
+});
+</script>
+</body>
+</html>
